@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<response>
+  <lst name="responseHeader">
+    <int name="status">0</int>
+    <int name="QTime">770</int>
+    <lst name="params">
+      <str name="q">g:org.postgresql AND a:postgresql</str>
+      <str name="core">gav</str>
+      <str name="indent">off</str>
+      <str name="fl">id,g,a,v,p,ec,timestamp,tags</str>
+      <str name="start"/>
+      <str name="sort">score desc,timestamp desc,g asc,a asc,v desc</str>
+      <str name="rows">20</str>
+      <str name="wt">xml</str>
+      <str name="version">2.2</str>
+    </lst>
+  </lst>
+  <result name="response" numFound="151" start="0">
+    <doc>
+      <str name="a">postgresql</str>
+      <arr name="ec">
+        <str>-sources.jar</str>
+        <str>-javadoc.jar</str>
+        <str>.jar</str>
+        <str>-jdbc-src.tar.gz</str>
+        <str>.pom</str>
+        <str>-features.xml</str>
+      </arr>
+      <str name="g">org.postgresql</str>
+      <str name="id">org.postgresql:postgresql:42.3.1</str>
+      <str name="p">jar</str>
+      <arr name="tags">
+        <str>driver</str>
+        <str>postgresql</str>
+        <str>jdbc</str>
+      </arr>
+      <long name="timestamp">1635527889000</long>
+      <str name="v">42.3.1</str>
+    </doc>
+    <doc>
+      <str name="a">postgresql</str>
+      <arr name="ec">
+        <str>-sources.jar</str>
+        <str>-javadoc.jar</str>
+        <str>.jar</str>
+        <str>-jdbc-src.tar.gz</str>
+        <str>.pom</str>
+        <str>-features.xml</str>
+      </arr>
+      <str name="g">org.postgresql</str>
+      <str name="id">org.postgresql:postgresql:42.3.0</str>
+      <str name="p">jar</str>
+      <arr name="tags">
+        <str>driver</str>
+        <str>postgresql</str>
+        <str>jdbc</str>
+      </arr>
+      <long name="timestamp">1634302665000</long>
+      <str name="v">42.3.0</str>
+    </doc>
+    <doc>
+      <str name="a">postgresql</str>
+      <arr name="ec">
+        <str>-javadoc.jar</str>
+        <str>-sources.jar</str>
+        <str>.jar</str>
+        <str>.pom</str>
+      </arr>
+      <str name="g">org.postgresql</str>
+      <str name="id">org.postgresql:postgresql:42.2.24.jre7</str>
+      <str name="p">jar</str>
+      <arr name="tags">
+        <str>jre7</str>
+        <str>driver</str>
+        <str>postgresql</str>
+        <str>jdbc</str>
+      </arr>
+      <long name="timestamp">1632395077000</long>
+      <str name="v">42.2.24.jre7</str>
+    </doc>
+    <doc>
+      <str name="a">postgresql</str>
+      <arr name="ec">
+        <str>-sources.jar</str>
+        <str>-javadoc.jar</str>
+        <str>.jar</str>
+        <str>-jdbc-src.tar.gz</str>
+        <str>.pom</str>
+        <str>-features.xml</str>
+      </arr>
+      <str name="g">org.postgresql</str>
+      <str name="id">org.postgresql:postgresql:42.2.19</str>
+      <str name="p">jar</str>
+      <arr name="tags">
+        <str>driver</str>
+        <str>postgresql</str>
+        <str>jdbc</str>
+      </arr>
+      <long name="timestamp">1613672030000</long>
+      <str name="v">42.2.19</str>
+    </doc>
+  </result>
+</response>

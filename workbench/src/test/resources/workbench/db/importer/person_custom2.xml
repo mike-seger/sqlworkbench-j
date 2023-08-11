@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<data>
+  <person>
+    <pid>1</pid><fname>Arthur</fname><lname>Dent</lname>
+  </person>
+  <person>
+    <pid>2</pid><fname>Zaphod</fname><lname>Beeblebrox</lname>
+  </person>
+  <person>
+    <pid>3</pid><fname>Tricia</fname><lname>McMillian</lname>
+  </person>
+  <person>
+    <pid>4</pid><fname>Mary</fname><lname>Moviestar</lname>
+  </person>
+</data>

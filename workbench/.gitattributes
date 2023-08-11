@@ -1,0 +1,7 @@
+*.java eol=auto
+*.xml eol=auto
+*.sql eol=auto
+*.xslt eol=auto
+*.sh eol=lf
+*.txt eol=auto
+

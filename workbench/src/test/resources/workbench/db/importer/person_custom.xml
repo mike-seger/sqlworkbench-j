@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<person>
+  <row pid="1" fname="Arthur" lname="Dent"/>
+  <row pid="2" fname="Zaphod" lname="Beeblebrox"/>
+  <row pid="3" fname="Tricia" lname="McMillian"/>
+  <row pid="4" fname="Mary"   lname="Moviestar"/>
+</person>

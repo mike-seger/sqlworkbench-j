@@ -1,0 +1,674 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project basedir="." default="jar" name="SQLWorkbench"
+         xmlns:if="ant:if"
+         xmlns:unless="ant:unless"
+         xmlns:mvn="antlib:org.apache.maven.resolver.ant">
+
+  <property name="root" value=".."/>
+  <property name="src" value="../src"/>
+  <property name="imgsrc" value="../src/main/resources/workbench/resource/images"/>
+  <property name="javasrc" value="../src/main/java"/>
+  <property name="scriptsrc" value="."/>
+  <property name="build" value="../target/classes"/>
+  <property name="distdir" value="../dist"/>
+  <property name="jarfile" value="sqlworkbench.jar"/>
+  <property name="srczipname" value="WorkbenchSrc.zip"/>
+  <property name="srczip" value="${root}/../${srczipname}"/>
+  <property name="target.version" value="11"/>
+
+  <taskdef name="xmltask"
+           classname="com.oopsconsultancy.xmltask.ant.XmlTask"
+           classpath="xmltask-v1.16.jar"/>
+
+  <taskdef uri="antlib:org.apache.maven.resolver.ant"
+           classpath="maven-resolver-ant-tasks-1.3.1-uber.jar" />
+
+  <mvn:pom file="../pom.xml" id="wb-pom"/>
+
+  <target name="init">
+    <tstamp>
+      <format pattern="yyyy-MM-dd" property="today"/>
+    </tstamp>
+    <tstamp>
+      <format pattern="yyyy-MM-dd HH:mm" property="build_timestamp"/>
+    </tstamp>
+
+    <condition property="is_windows">
+        <os family="windows"/>
+    </condition>
+
+    <echo>Java/JVM version: ${java.version}</echo>
+  </target>
+
+  <target name="set-build-number" depends="prepare">
+    <buildnumber file="build.number"/>
+    <echo message="Build number is ${build.number}"/>
+
+    <!-- Reset the sub-build number for dev-builds -->
+    <propertyfile file="devbuild.number">
+      <entry key="dev-build.number" type="int" operation="=" value="0"/>
+    </propertyfile>
+    <antcall target="replace-build-number"/>
+  </target>
+
+  <target name="replace-build-number" depends="copy-resources">
+    <replace dir="${build}/language" token="@BUILD_NUMBER@" value="${build.number}"/>
+    <replace dir="${build}/language" token="@BUILD_DATE@" value="${build_timestamp}"/>
+  </target>
+
+  <target name="set-dev-build" depends="prepare">
+    <propertyfile file="devbuild.number">
+      <entry key="dev-build.number" type="int" operation="+" value="1"/>
+    </propertyfile>
+    <loadproperties srcFile="release.property"/>
+    <loadproperties srcFile="devbuild.number"/>
+
+    <property name="build.number" value="${release.build.number}.${dev-build.number}"/>
+    <echo message="Build number is ${build.number}"/>
+    <antcall target="replace-build-number"/>
+  </target>
+
+  <target name="get-dev-build" depends="prepare">
+    <loadproperties srcFile="release.property"/>
+    <loadproperties srcFile="devbuild.number"/>
+
+    <property name="build.number" value="${release.build.number}.${dev-build.number}"/>
+    <echo message="Build number is ${build.number}"/>
+  </target>
+
+  <target name="clean">
+    <delete dir="${build}" failonerror="false"/>
+    <delete dir="${distdir}" failonerror="false"/>
+  </target>
+
+  <target name="prepare" depends="init">
+    <mkdir dir="${build}"/>
+    <mkdir dir="${distdir}"/>
+    <mkdir dir="${distdir}/libs"/>
+  </target>
+
+  <target name="copy-resources" depends="init">
+    <copy overwrite="true" todir="${build}">
+      <fileset defaultexcludes="true" dir="${src}/main/resources">
+        <include name="**/*.*"/>
+        <exclude name="**/*.html"/>
+        <exclude name="**/*.java"/>
+        <exclude name="**/*.form"/>
+        <exclude name="**/*.class"/>
+        <exclude name="**/*.flex"/>
+      </fileset>
+    </copy>
+  </target>
+
+
+  <target name="copy-libs">
+    <mvn:resolve>
+      <dependencies pomRef="wb-pom"/>
+      <!-- this copies all libraries so that we can package them later -->
+      <files dir="${distdir}/libs" layout="{artifactId}.{extension}" scopes="compile,runtime"/>
+    </mvn:resolve>
+  </target>
+
+  <target name="compile" depends="prepare">
+
+    <mvn:resolve>
+      <dependencies pomRef="wb-pom"/>
+      <!-- gets the classpath and all libraries from the Maven POM -->
+      <path refid="maven.cp" classpath="compile"/>
+    </mvn:resolve>
+
+    <!-- compile the starter class with target=1.6 so that it can be loaded by
+         older JVMs as well and is able to display the error message -->
+    <javac debug="on"
+           debuglevel="source,lines"
+           destdir="${build}"
+           srcdir="${javasrc}"
+           target="1.6"
+           source="1.6"
+           encoding="ISO-8859-15"
+           includeantruntime="false"
+           includes="workbench/WbStarter.java"/>
+
+    <!-- the rest of the application is compiled to the needed class file version -->
+    <javac if:set="is_windows"
+           debug="on"
+           debuglevel="source,lines"
+           destdir="${build}"
+           srcdir="${javasrc}"
+           includeantruntime="false"
+           classpathref="maven.cp"
+           encoding="ISO-8859-15">
+      <compilerarg line="-Xlint:none --add-exports java.desktop/com.sun.java.swing.plaf.windows=ALL-UNNAMED"/>
+      <exclude name="workbench/WbStarter.java"/>
+    </javac>
+
+    <javac unless:set="is_windows"
+           debug="on"
+           debuglevel="source,lines"
+           destdir="${build}"
+           srcdir="${javasrc}"
+           includeantruntime="false"
+           classpathref="maven.cp"
+           encoding="ISO-8859-15">
+      <compilerarg line="-Xlint:none"/>
+      <exclude name="workbench/WbStarter.java"/>
+      <exclude name="workbench/gui/components/BorderLessWindowsTabbedPaneUI.java"/>
+    </javac>
+
+  </target>
+
+  <target name="-make-jar" depends="prepare,compile">
+
+    <jar compress="true" level="9" jarfile="${distdir}/${jarfile}">
+      <manifest>
+        <attribute name="Main-Class" value="workbench.WbStarter"/>
+        <attribute name="Class-Path" value=". ext/flatlaf.jar ext/poi.jar ext/poi-ooxml.jar ext/commons-codec.jar ext/commons-collections4.jar ext/commons-io.jar ext/commons-compress.jar ext/commons-logging.jar ext/poi-ooxml-lite.jar ext/SODS.jar ext/jna.jar ext/jna-platform.jar ext/xmlbeans.jar ext/poi-ooxml-full.jar ext/log4j-api.jar ext/log4j-core.jar ext/dbunit.jar ext/slf4j-api.jar ext/mail.jar ext/jsch.jar ext/"/>
+        <attribute name="Created-By" value="Thomas Kellerer (support@sql-workbench.eu)"/>
+        <attribute name="Implementation-Title" value="SQL Workbench/J"/>
+        <attribute name="Implementation-URL" value="http://www.sql-workbench.eu"/>
+        <attribute name="WbBuild-Number" value="${build.number}"/>
+        <attribute name="WbBuild-Date" value="${build_timestamp}"/>
+        <attribute name="Add-Opens" value="java.desktop/com.sun.java.swing.plaf.windows java.desktop/com.apple.laf java.base/java.lang"/>
+      </manifest>
+      <fileset dir="${build}">
+        <exclude name="**/package.html"/>
+      </fileset>
+    </jar>
+
+  </target>
+
+  <target name="make-release-manual">
+    <ant antfile="../../manual/build.xml" inheritall="false" target="publish"/>
+  </target>
+
+  <target name="make-dev-manual">
+    <ant antfile="../../manual/build.xml" inheritall="false" target="publish-dev"/>
+  </target>
+
+  <target name="set-release-info">
+    <tstamp>
+      <format pattern="yyyy-MM-dd" property="today"/>
+    </tstamp>
+
+    <!-- reset the release property file -->
+    <delete file="release.property"/>
+
+    <propertyfile file="release.property">
+      <entry key="release.build.number" value="${build.number}"/>
+      <entry key="release.build.date" value="${today}"/>
+    </propertyfile>
+  </target>
+
+  <!-- build a full release -->
+  <target name="release" depends="clean, compile, set-build-number, set-release-info, set-history-release-number, set-history-build-date, make-release-manual, -make-jar, release-src-zip, release-package, -make-sha1">
+
+    <ant dir="..\website" inheritall="false" target="release"/>
+
+    <mkdir dir="${root}/release/build${build.number}"/>
+
+    <move todir="${root}/release/build${build.number}">
+      <fileset dir="${distdir}">
+        <include name="WorkbenchSrc-Build${build.number}.zip"/>
+        <include name="Workbench-Build${build.number}*.zip"/>
+        <include name="Workbench-Build${build.number}*.tgz"/>
+        <include name="*.sha1"/>
+      </fileset>
+    </move>
+
+  </target>
+
+  <target name="set-dev-prop">
+    <property name="dev-jar" value="1"/>
+  </target>
+
+  <target name="jar" depends="set-dev-prop, copy-resources, compile, get-dev-build, replace-build-number, -make-jar"/>
+
+  <!-- build a development release -->
+  <target name="dev-release" depends="clean, compile, set-dev-build, set-history-build-date, make-dev-manual, -make-jar, release-package, release-src-zip, -make-sha1">
+    <tstamp>
+      <format pattern="yyyy-MM-dd" property="today"/>
+    </tstamp>
+
+    <propertyfile file="release.property">
+      <entry key="dev.build.date" value="${today}"/>
+      <entry key="dev.build.number" value="${build.number}"/>
+    </propertyfile>
+    <ant dir="../website" inheritall="false" target="dev-release"/>
+  </target>
+
+  <target name="set-history-release-number" depends="set-build-number">
+    <xmltask outputter="simple:2" omitHeader="no" source="history.xml" dest="history.xml">
+      <attr path="/history/release[1]" attr="build" value="${build.number}"/>
+    </xmltask>
+  </target>
+
+  <target name="set-history-build-date" depends="init" unless="dev-jar">
+    <xmltask outputter="simple:2" omitHeader="no" source="history.xml" dest="history.xml">
+      <attr path="/history/release[1]" attr="date" value="${today}"/>
+    </xmltask>
+  </target>
+
+  <target name="website">
+    <ant antfile="../website/build.xml" inheritall="false" target="release"/>
+  </target>
+
+  <target name="release-package" depends="fixshellscripts, copy-libs">
+
+    <zip zipfile="${distdir}/Workbench-Build${build.number}.zip">
+      <zipfileset dir="${distdir}">
+        <include name="${jarfile}"/>
+        <include name="SQLWorkbench-Manual.pdf"/>
+      </zipfileset>
+      <zipfileset dir="../../launcher/release">
+        <include name="SQLWorkbench.exe"/>
+        <include name="SQLWorkbench64.exe"/>
+      </zipfileset>
+      <zipfileset dir="../../launcher">
+        <include name="SQLWorkbench.cfg.sample"/>
+      </zipfileset>
+      <zipfileset dir="${scriptsrc}" prefix="ext">
+        <include name="README_EXT"/>
+      </zipfileset>
+      <zipfileset dir="${distdir}/libs" prefix="ext">
+        <include name="flatlaf.jar"/>
+        <include name="jsch.jar"/>
+      </zipfileset>
+      <zipfileset dir="${scriptsrc}">
+        <include name="log4j-sample.xml"/>
+        <include name="sqlwbconsole.cmd"/>
+        <include name="sqlworkbench.cmd"/>
+        <include name="history.html"/>
+        <include name="LICENSE"/>
+        <include name="download_jre.cmd"/>
+        <include name="download_jre.ps1"/>
+        <include name="README Libraries NEW"/>
+      </zipfileset>
+      <zipfileset dir="${scriptsrc}" filemode="555">
+        <include name="sqlworkbench.sh"/>
+        <include name="sqlwbconsole.sh"/>
+        <include name="download_jre.sh"/>
+      </zipfileset>
+      <zipfileset dir="${imgsrc}">
+        <include name="workbench32.png"/>
+      </zipfileset>
+      <zipfileset dir="../../manual/dist" prefix="manual">
+        <include name="**/*.*"/>
+        <exclude name="**/*.xml"/>
+      </zipfileset>
+      <zipfileset dir="../xslt" prefix="xslt">
+        <include name="**/*.xslt"/>
+      </zipfileset>
+    </zip>
+
+    <zip zipfile="${distdir}/Workbench-Build${build.number}-with-optional-libs.zip">
+      <zipfileset dir="${distdir}">
+        <include name="${jarfile}"/>
+        <include name="SQLWorkbench-Manual.pdf"/>
+      </zipfileset>
+      <zipfileset dir="${distdir}/libs" prefix="ext">
+        <include name="*.jar"/>
+        <exclude name="log4j-core*.jar"/>
+      </zipfileset>
+      <zipfileset dir="../../launcher/release">
+        <include name="SQLWorkbench.exe"/>
+        <include name="SQLWorkbench64.exe"/>
+      </zipfileset>
+      <zipfileset dir="../../launcher">
+        <include name="SQLWorkbench.cfg.sample"/>
+      </zipfileset>
+      <zipfileset dir="${scriptsrc}">
+        <include name="log4j-sample.xml"/>
+        <include name="sqlworkbench.cmd"/>
+        <include name="sqlwbconsole.cmd"/>
+        <include name="history.html"/>
+        <include name="README Libraries NEW"/>
+        <include name="LICENSE"/>
+        <include name="download_jre.cmd"/>
+        <include name="download_jre.ps1"/>
+      </zipfileset>
+      <zipfileset dir="${scriptsrc}" filemode="555">
+        <include name="sqlworkbench.sh"/>
+        <include name="sqlwbconsole.sh"/>
+        <include name="download_jre.sh"/>
+      </zipfileset>
+      <zipfileset dir="${imgsrc}">
+        <include name="workbench32.png"/>
+      </zipfileset>
+      <zipfileset dir="../../manual/dist" prefix="manual">
+        <include name="**/*.*"/>
+      </zipfileset>
+      <zipfileset dir="../xslt" prefix="xslt">
+        <include name="**/*.xslt"/>
+      </zipfileset>
+    </zip>
+
+    <delete file="docbook-history.xml" failonerror="false"/>
+
+  </target>
+
+  <target name="-make-sha1">
+    <checksum algorithm="SHA-1" fileext=".sha1">
+      <fileset dir="${distdir}">
+        <include name="WorkbenchSrc-Build${build.number}.zip"/>
+        <include name="Workbench-Build${build.number}*.zip"/>
+        <include name="Workbench-Build${build.number}-with-optional-libs.zip"/>
+      </fileset>
+    </checksum>
+  </target>
+
+  <target name="release-src-zip" depends="init,fixshellscripts">
+
+    <zip zipfile="${distdir}/WorkbenchSrc-Build${build.number}.zip">
+      <zipfileset dir="..">
+        <include name="pom.xml"/>
+        <include name="README.md"/>
+      </zipfileset>
+
+      <zipfileset dir="${src}" prefix="src">
+        <include name="**/*.*"/>
+      </zipfileset>
+
+      <zipfileset dir="${scriptsrc}" prefix="scripts">
+        <include name="build.xml"/>
+        <include name="log4j-sample.xml"/>
+        <include name="devbuild.number"/>
+        <include name="build.number"/>
+        <include name="release.property"/>
+        <include name="history.xml"/>
+        <include name="SQLWorkbench.vbs"/>
+        <include name="sqlwbconsole.cmd"/>
+        <include name="sqlworkbench.sh"/>
+        <include name="download_jre.cmd"/>
+        <include name="download_jre.ps1"/>
+        <include name="download_jre.sh"/>
+        <include name="*.xslt"/>
+        <include name="LICENSE"/>
+        <include name="README_EXT"/>
+        <exclude name="**/*test*"/>
+      </zipfileset>
+
+      <zipfileset dir="../../manual" prefix="doc">
+        <include name="css/*.*"/>
+        <include name="xml/*.*"/>
+        <include name="xsl/*.*"/>
+        <include name="*.*"/>
+        <exclude name="**/.nb*"/>
+        <exclude name="**/tags"/>
+        <exclude name="**/*.tws"/>
+      </zipfileset>
+
+      <zipfileset dir="../xslt" prefix="xslt">
+        <include name="*.*"/>
+      </zipfileset>
+
+      <zipfileset dir="../../launcher" prefix="launcher">
+        <include name="**/*.*"/>
+        <exclude name="Workbench Launcher.*"/>
+        <exclude name=".vscode/**"/>
+        <exclude name="bin/**"/>
+        <exclude name="obj/**"/>
+        <exclude name="release/**"/>
+      </zipfileset>
+    </zip>
+  </target>
+
+  <target name="generate-lexer">
+
+    <copy quiet="true" overwrite="true"
+          file="../src/main/java/workbench/sql/lexer/BaseLexer.flex"
+          tofile="../src/main/java/workbench/sql/lexer/StandardLexer.flex"/>
+
+    <copy quiet="true" overwrite="true"
+          file="../src/main/java/workbench/sql/lexer/BaseLexer.flex"
+          tofile="../src/main/java/workbench/sql/lexer/OracleLexer.flex"/>
+
+    <copy quiet="true" overwrite="true"
+          file="../src/main/java/workbench/sql/lexer/BaseLexer.flex"
+          tofile="../src/main/java/workbench/sql/lexer/NonStandardLexer.flex"/>
+
+    <copy quiet="true" overwrite="true"
+          file="../src/main/java/workbench/sql/lexer/BaseLexer.flex"
+          tofile="../src/main/java/workbench/sql/lexer/MySQLLexer.flex"/>
+
+    <copy quiet="true" overwrite="true"
+          file="../src/main/java/workbench/sql/lexer/BaseLexer.flex"
+          tofile="../src/main/java/workbench/sql/lexer/SqlServerLexer.flex"/>
+
+    <copy quiet="true" overwrite="true"
+          file="../src/main/java/workbench/sql/lexer/BaseLexer.flex"
+          tofile="../src/main/java/workbench/sql/lexer/PostgresLexer.flex"/>
+
+    <copy quiet="true" overwrite="true"
+          file="../src/main/java/workbench/sql/lexer/BaseLexer.flex"
+          tofile="../src/main/java/workbench/sql/lexer/FirebirdLexer.flex"/>
+
+    <replace file="../src/main/java/workbench/sql/lexer/StandardLexer.flex">
+      <replacefilter token="XXXX_DBMS_XXXX|"/>
+      <replacefilter token="XXXX_DBMS2_XXXX|"/>
+    </replace>
+
+    <replace file="../src/main/java/workbench/sql/lexer/FirebirdLexer.flex">
+      <replacefilter>
+        <replacetoken>StandardLexer</replacetoken>
+        <replacevalue>FirebirdLexer</replacevalue>
+      </replacefilter>
+      <replacefilter token="XXXX_DBMS_XXXX|"
+                     value='"DELIMITER"|(SET{wsp}TERM)|"EXCEPTION"|"SHADOW"|"FILTER"|(EXTERNAL{wsp}FUNCTION)|'/>
+      <replacefilter token="XXXX_DBMS2_XXXX|"/>
+      <replacefilter token="(OUTER{wsp}APPLY)|"/>
+      <replacefilter token="(CROSS{wsp}APPLY)|"/>
+    </replace>
+
+    <replace file="../src/main/java/workbench/sql/lexer/OracleLexer.flex">
+      <replacefilter>
+        <replacetoken>StandardLexer</replacetoken>
+        <replacevalue>OracleLexer</replacevalue>
+      </replacefilter>
+      <replacefilter token="XXXX_DBMS_XXXX|"
+                     value='"VARCHAR2"|"NVARCHAR2"|"FORCE"|(NO{wsp}FORCE)|(LOCKDOWN{wsp}PROFILE)|(JSON{wsp}DUALITY)|(JSON{wsp}RELATIONAL{wsp}DUALITY)|(IMMUTABLE{wsp}NOT{wsp}BLOCKCHAIN)|'/>
+      <replacefilter token="XXXX_DBMS2_XXXX|"
+                     value='(PACKAGE{wsp}BODY)|(TYPE{wsp}BODY)|(SNAPSHOT{wsp}LOG)|(DATABASE{wsp}LINK)|(AUDIT{wsp}POLICY)|(FLASHBACK{wsp}ARCHIVE)|(CONNECT{wsp}BY)|(START{wsp}WITH)|(MATERIALIZED{wsp}VIEW{wsp}LOG)|(MATERIALIZED{wsp}ZONEMAP)|(RESTORE{wsp}POINT)|'/>
+    </replace>
+
+    <replace file="../src/main/java/workbench/sql/lexer/PostgresLexer.flex">
+      <replacefilter>
+        <replacetoken>StandardLexer</replacetoken>
+        <replacevalue>PostgresLexer</replacevalue>
+      </replacefilter>
+      <replacefilter token="XXXX_DBMS_XXXX|"
+                     value='(NESTED{wsp}PATH)|(ON{wsp}ERROR)|(IS{wsp}DOCUMENT)|(IS{wsp}NOT{wsp}DOCUMENT)|(ACCESS{wsp}METHOD)|(FOREIGN{wsp}TABLE)|(TIME{wsp}ZONE)|(OPERATOR{wsp}CLASS)|(OPERATOR{wsp}FAMILY)|(ACCESS{wsp}METHOD)|(EVENT{wsp}TRIGGER)|(USER{wsp}MAPPING)|"TRANSFORM"|"PASSING"|"PLAN"|"LIMIT"|"OFFSET"|"CLUSTER"|"DISCARD"|"DEALLOCATE"|"DO"|"(IMPORT{wsp}FOREIGN{wsp}SCHEMA)"|"VACUUM"|(FOREIGN{wsp}DATA{wsp}WRAPPER)|(SKIP{wsp}LOCKED)|(NO{wsp}KEY{wsp}UPDATE)|(KEY{wsp}SHARE)|(MATCH{wsp}FULL)|(MATCH{wsp}PARTIAL)|(MATCH{wsp}SIMPLE)|(DEFAULT{wsp}PRIVILEGES)|'/>
+      <replacefilter token="XXXX_DBMS2_XXXX|"
+                     value="(DISTINCT{wsp}ON)|(EVENT{wsp}TRIGGER)|(TEXT{wsp}SEARCH{wsp}CONFIGURATION)|(TEXT{wsp}SEARCH{wsp}DICTIONARY)|(TEXT{wsp}SEARCH{wsp}PARSER)|(TEXT{wsp}SEARCH{wsp}TEMPLATE)|"/>
+      <replacefilter token="(CREATE{wsp}OR{wsp}ALTER)|" value='"STATISTICS"|"FORMAT"|"ABSENT"|'/>
+      <replacefilter token='"SYSDATE"|' />
+      <replacefilter token="(OUTER{wsp}APPLY)|" value='"TRANSFORM"|(USER{wsp}MAPPING)|'/>
+      <replacefilter token="(CROSS{wsp}APPLY)|" value="(OWNED{wsp}BY)|"/>
+      <replacefilter token='"SYSTIMESTAMP"|' value='"LOCALTIMESTAMP"|'/>
+      <replacefilter token='"SESSION_USER"|'/>
+      <replacefilter>
+        <replacetoken><![CDATA[operator=([\+\-\*\/\<\>\=\~\!\%\^\&\?]|"||"|"!="|"<>"|"<="|">="|"=>"|"(+)")]]></replacetoken>
+        <replacevalue><![CDATA[operator=([\+\-\*\/\<\>\=\~\!\%\^\&\?]|"~>~"|"~>=~"|"~<~"|"~<=~"|"!~~*"|"||"|"|/"|"||/"|"!!"|"<<"|">>"|"##"|"~"|"~*"|"!~"|"!~*"|"@?"|"^@"|"@-@"|"@@"|"@@@"|"?&"|"#-"|"#>"|"#>>"|"->"|"->>"|"<->"|"&<"|"&>"|"<<|"|"|>>"|"&<|"|"|&>"|"<^"|">^"|"?#"|"?-"|"?|"|"?-|"|"?|"|"~="|"!="|"<>"|"<="|">="|"=>"|"@>"|"<@")|" @?"|"<<="|">>="]]></replacevalue>
+      </replacefilter>
+      <replacefilter>
+        <replacetoken><![CDATA[identifier=([^ \"\r\n\t\f\+\-\*\/\<\>\=\~\!\%\^\&\'\~\?\(\)\[\]\,\;\:\.0-9][^ \r\n\t\f\+\-\*\/\<\>\=\~\!\%\^\&\'\"\~\?\(\)\]\[\,\;\:\*]*)|(\"[^\r\n\t\f\"]*\")]]></replacetoken>
+        <replacevalue><![CDATA[identifier=([^ \"\r\n\t\f\+\-\*\/\<\>\=\~\!\%\^\&\'\~\?\(\)\[\]\,\;\:\.0-9][^ #\r\n\t\f\+\-\*\/\<\>\=\~\!\%\^\&\'\"\~\?\(\)\]\[\,\;\:\*]*)|(\"([^\r\n\t\f\"]*(\"\")*[^\r\n\t\f\"]*)+\")]]></replacevalue>
+      </replacefilter>
+      <replacefilter>
+        <replacetoken><![CDATA[string=([\'](([^\']|\'\')*)[\']|[Nn][\'](([^\']|\'\')*)[\'])]]></replacetoken>
+        <replacevalue><![CDATA[string=([\'](([^\']|\'\')*)[\']|[Ee][\'](([^\']|\'\')*)[\'])]]></replacevalue>
+      </replacefilter>
+    </replace>
+
+    <copy quiet="true" overwrite="true"
+          file="../src/main/java/workbench/sql/lexer/PostgresLexer.flex"
+          tofile="../src/main/java/workbench/sql/lexer/PgEscapingLexer.flex"/>
+
+    <replace file="../src/main/java/workbench/sql/lexer/PgEscapingLexer.flex">
+      <!-- this generates a Postgres based lexer that can handle the backslash for escaping single quotes inside a string literal -->
+      <replacefilter>
+        <replacetoken>PostgresLexer</replacetoken>
+        <replacevalue>PgEscapingLexer</replacevalue>
+      </replacefilter>
+      <replacefilter>
+        <replacetoken>string=([\'](([^\']|\'\')*)[\']|[Ee][\'](([^\']|\'\')*)[\'])</replacetoken>
+        <replacevalue>string=([\'](([^\']|\'\'|\\\')*)[\']|[Ee][\'](([^\']|\'\')*)[\'])</replacevalue>
+      </replacefilter>
+    </replace>
+
+    <replace file="../src/main/java/workbench/sql/lexer/SqlServerLexer.flex">
+      <replacefilter>
+        <replacetoken>StandardLexer</replacetoken>
+        <replacevalue>SqlServerLexer</replacevalue>
+      </replacefilter>
+      <replacefilter token="XXXX_DBMS_XXXX|" value="(BEGIN{wsp}TRAN)|(UPDATE{wsp}STATISTICS)|"/>
+      <replacefilter token="XXXX_DBMS2_XXXX|"/>
+      <replacefilter token='(MATERIALIZED{wsp}VIEW)|' value='(INDEXED{wsp}VIEW)|'/>
+      <replacefilter token='"SIMILAR"|'/>
+      <replacefilter token='"OVERLAPS"|'/>
+      <replacefilter token='"VARCHAR2"|'/>
+      <replacefilter token='"DEPTH"|'/>
+      <replacefilter token='"DEPTH"|'/>
+      <replacefilter token='"DEFERRABLE"|'/>
+      <replacefilter token='"DEFERRED"|'/>
+      <replacefilter token='"WHENEVER"|'/>
+      <replacefilter token='"SYSTIMESTAMP"|'/>
+      <replacefilter token="(CREATE{wsp}OR{wsp}REPLACE)|"/>
+      <replacefilter token="(CREATE{wsp}OR{wsp}ALTER)|"/>
+      <replacefilter>
+        <replacetoken><![CDATA[identifier=([^ \"\r\n\t\f\+\-\*\/\<\>\=\~\!\%\^\&\'\~\?\(\)\[\]\,\;\:\.0-9][^ \r\n\t\f\+\-\*\/\<\>\=\~\!\%\^\&\'\"\~\?\(\)\]\[\,\;\:\*]*)|(\"[^\r\n\t\f\"]*\")]]></replacetoken>
+        <replacevalue><![CDATA[identifier=([^ \"\r\n\t\f\+\-\*\/\<\>\=\~\!\%\^\&\'\~\?\(\)\[\]\,\;\:\.0-9][^ \r\n\t\f\+\-\*\/\<\>\=\~\!\%\^\&\'\"\~\?\(\)\]\[\,\;\:\*]*)|(\"[^\r\n\t\f\"]*\")|(\[[^\r\n\t\f\[]*\]) ]]></replacevalue>
+      </replacefilter>
+      <replacefilter>
+        <replacetoken><![CDATA[operator=([\+\-\*\/\<\>\=\~\!\%\^\&\?]|"||"|"!="|"<>"|"<="|">="|"=>"|"(+)")]]></replacetoken>
+        <replacevalue><![CDATA[operator=([\+\-\*\/\<\>\=\~\!\%\^\&]|"||"|"!="|"<>"|"*="|"=*"|"<="|">="|"=>")]]></replacevalue>
+      </replacefilter>
+      <replacefilter>
+        <replacetoken><![CDATA[bitstring=("B"[\']([01]+)[\'])]]></replacetoken>
+        <replacevalue><![CDATA[bitstring=("B"[\']([01]+)[\'])|"0x"[0-9A-Fa-f]+]]></replacevalue>
+      </replacefilter>
+    </replace>
+
+    <replace file="../src/main/java/workbench/sql/lexer/NonStandardLexer.flex">
+      <!-- this generates a Lexer that can handle the backslash for escaping single quotes inside a string literal -->
+      <replacefilter>
+        <replacetoken>StandardLexer</replacetoken>
+        <replacevalue>NonStandardLexer</replacevalue>
+      </replacefilter>
+      <replacefilter token="XXXX_DBMS_XXXX|"/>
+      <replacefilter token="XXXX_DBMS2_XXXX|"/>
+      <replacefilter>
+        <replacetoken>string=([\'](([^\']|\'\')*)[\']|[Nn][\'](([^\']|\'\')*)[\'])</replacetoken>
+        <replacevalue>string=([\'](([^\']|\'\'|\\\')*)[\'])</replacevalue>
+      </replacefilter>
+      <replacefilter>
+        <replacetoken><![CDATA[operator=([\+\-\*\/\<\>\=\~\!\%\^\&\?]|"||"|"!="|"<>"|"<="|">="|"=>"|"(+)")]]></replacetoken>
+        <replacevalue><![CDATA[operator=([\+\-\*\/\<\>\=\~\!\%\^\&\?]|"||"|"|/"|"||/"|"!!"|"<<"|">>"|"##"|"~"|"~*"|"!~"|"!~*"|"@-@"|"@@"|"@@@"|"?&"|"#-"|"#>"|"#>>"|"->"|"->>"|"<->"|"&<"|"&>"|"<<|"|"|>>"|"&<|"|"|&>"|"<^"|">^"|"?#"|"?-"|"?|"|"?-|"|"?|"|"~="|"!="|"<>"|"<="|">="|"=>"|"@>"|"<@")|"<<="|">>="]]></replacevalue>
+      </replacefilter>
+    </replace>
+
+    <replace file="../src/main/java/workbench/sql/lexer/MySQLLexer.flex">
+      <replacefilter>
+        <replacetoken>StandardLexer</replacetoken>
+        <replacevalue>MySQLLexer</replacevalue>
+      </replacefilter>
+      <replacefilter token="XXXX_DBMS_XXXX|" value="(LOGFILE{wsp}GROUP)|"/>
+      <replacefilter token="XXXX_DBMS2_XXXX|"/>
+      <replacefilter token="(BEGIN{wsp}ATOMIC)|"/>
+      <replacefilter token="(SIMILAR{wsp}TO)|"/>
+      <replacefilter token='"OVERLAPS"|'/>
+      <replacefilter token='"VARCHAR2"|'/>
+      <replacefilter token='"DEFERRABLE"|'/>
+      <replacefilter token='"DEFERRED"|'/>
+      <replacefilter token="(CREATE{wsp}OR{wsp}REPLACE)|"/>
+      <replacefilter token="(CREATE{wsp}OR{wsp}ALTER)|"/>
+      <replacefilter token="(FULL{wsp}JOIN)|"/>
+      <replacefilter token="(FULL{wsp}OUTER{wsp}JOIN)|"/>
+      <replacefilter token="(OUTER{wsp}APPLY)|"/>
+      <replacefilter token="(CROSS{wsp}APPLY)|"/>
+      <replacefilter>
+        <replacetoken>linecomment=("--"[^\r\n]*)</replacetoken>
+        <replacevalue>linecomment=("--"[ \t]+[^\r\n]*)|("#"[^\r\n]*)</replacevalue>
+      </replacefilter>
+      <replacefilter>
+        <replacetoken><![CDATA[identifier=([^ \"\r\n\t\f\+\-\*\/\<\>\=\~\!\%\^\&\'\~\?\(\)\[\]\,\;\:\.0-9][^ \r\n\t\f\+\-\*\/\<\>\=\~\!\%\^\&\'\"\~\?\(\)\]\[\,\;\:\*]*)|(\"[^\r\n\t\f\"]*\")]]></replacetoken>
+        <replacevalue><![CDATA[identifier=([^ \"\r\n\t\f\+\-\*\/\<\>\=\~\!\%\^\&\'\~\?\(\)\[\]\,\;\:\.0-9][^ #\r\n\t\f\+\-\*\/\<\>\=\~\!\%\^\&\'\"\~\?\(\)\]\[\,\;\:\*]*)|(\"[^\r\n\t\f\"]*\")|(`[^\r\n\t\f`]+`)]]></replacevalue>
+      </replacefilter>
+      <replacefilter>
+        <replacetoken><![CDATA[operator=([\+\-\*\/\<\>\=\~\!\%\^\&\?]|"||"|"!="|"<>"|"<="|">="|"=>"|"(+)")]]></replacetoken>
+        <replacevalue><![CDATA[operator=([\+\-\*\/\<\>\=\~\!\%\^\&]|"||"|"!="|"<>"|"<="|">="|"=>"|"<=>"|"->"|"->>"|":="|"&&"|"<<"|">>")]]></replacevalue>
+      </replacefilter>
+    </replace>
+
+    <java classname="JFlex.Main" classpath="JFlex.jar" fork="true">
+      <jvmarg value="-Xmx256m"/>
+      <arg value="-q"/>
+      <arg value="-nobak"/>
+      <arg value="../src/main/java/workbench/sql/lexer/StandardLexer.flex"/>
+    </java>
+
+    <java classname="JFlex.Main" classpath="JFlex.jar" fork="true">
+      <jvmarg value="-Xmx256m"/>
+      <arg value="-q"/>
+      <arg value="-nobak"/>
+      <arg value="../src/main/java/workbench/sql/lexer/PostgresLexer.flex"/>
+    </java>
+
+    <java classname="JFlex.Main" classpath="JFlex.jar" fork="true">
+      <jvmarg value="-Xmx256m"/>
+      <arg value="-q"/>
+      <arg value="-nobak"/>
+      <arg value="../src/main/java/workbench/sql/lexer/FirebirdLexer.flex"/>
+    </java>
+
+    <java classname="JFlex.Main" classpath="JFlex.jar" fork="true">
+      <jvmarg value="-Xmx256m"/>
+      <arg value="-q"/>
+      <arg value="-nobak"/>
+      <arg value="../src/main/java/workbench/sql/lexer/NonStandardLexer.flex"/>
+    </java>
+
+    <java classname="JFlex.Main" classpath="JFlex.jar" fork="true">
+      <jvmarg value="-Xmx256m"/>
+      <arg value="-q"/>
+      <arg value="-nobak"/>
+      <arg value="../src/main/java/workbench/sql/lexer/MySQLLexer.flex"/>
+    </java>
+
+    <java classname="JFlex.Main" classpath="JFlex.jar" fork="true">
+      <jvmarg value="-Xmx256m"/>
+      <arg value="-q"/>
+      <arg value="-nobak"/>
+      <arg value="../src/main/java/workbench/sql/lexer/SqlServerLexer.flex"/>
+    </java>
+
+    <java classname="JFlex.Main" classpath="JFlex.jar" fork="true">
+      <jvmarg value="-Xmx256m"/>
+      <arg value="-q"/>
+      <arg value="-nobak"/>
+      <arg value="../src/main/java/workbench/sql/lexer/PgEscapingLexer.flex"/>
+    </java>
+
+    <java classname="JFlex.Main" classpath="JFlex.jar" fork="true">
+      <jvmarg value="-Xmx256m"/>
+      <arg value="-q"/>
+      <arg value="-nobak"/>
+      <arg value="../src/main/java/workbench/sql/lexer/OracleLexer.flex"/>
+    </java>
+
+  </target>
+
+  <target name="fixshellscripts">
+
+    <fixcrlf srcdir="${scriptsrc}"
+       eol="lf"
+       eof="remove"
+       includes="**/*.sh"/>
+
+    <fixcrlf srcdir="${scriptsrc}"
+       eol="crlf"
+       eof="remove"
+       includes="**/*.cmd"/>
+
+  </target>
+
+</project>
